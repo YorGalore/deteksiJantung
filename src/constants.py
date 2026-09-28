@@ -70,20 +70,20 @@ TRIAGE_VALID_RANGE = {
 # Keluhan utama (regex, dicocokkan pada teks huruf kecil)
 # ---------------------------------------------------------------------------
 CC_PATTERNS = {
-    "cc_chest_pain": r"\b(chest pain|cp|chest pressure|chest tightness|chest discomfort)\b",
-    "cc_dyspnea": r"\b(sob|dyspnea|shortness of breath|difficulty breathing)\b",
-    "cc_syncope": r"\b(syncope|syncopal|passed out|loc)\b",
-    "cc_weakness": r"\b(weakness|fatigue|malaise)\b",
-    "cc_epigastric_abd": r"\b(epigastric|abd pain|abdominal pain)\b",
-    "cc_palpitations": r"\b(palpitations|palps|racing heart)\b",
-    "cc_dizziness": r"\b(dizzy|dizziness|lightheaded)\b",
-    "cc_nausea_vomit": r"\b(nausea|vomiting|n/v)\b",
-    "cc_diaphoresis": r"\b(diaphoresis|diaphoretic|sweating)\b",
-    "cc_arm_jaw_pain": r"\b(arm pain|jaw pain)\b",
+    "cc_chest_pain": r"\b(?:chest pain|cp|chest pressure|chest tightness|chest discomfort)\b",
+    "cc_dyspnea": r"\b(?:sob|dyspnea|shortness of breath|difficulty breathing)\b",
+    "cc_syncope": r"\b(?:syncope|syncopal|passed out|loc)\b",
+    "cc_weakness": r"\b(?:weakness|fatigue|malaise)\b",
+    "cc_epigastric_abd": r"\b(?:epigastric|abd pain|abdominal pain)\b",
+    "cc_palpitations": r"\b(?:palpitations|palps|racing heart)\b",
+    "cc_dizziness": r"\b(?:dizzy|dizziness|lightheaded)\b",
+    "cc_nausea_vomit": r"\b(?:nausea|vomiting|n/v)\b",
+    "cc_diaphoresis": r"\b(?:diaphoresis|diaphoretic|sweating)\b",
+    "cc_arm_jaw_pain": r"\b(?:arm pain|jaw pain)\b",
     "cc_back_pain": r"\bback pain\b",
 }
 # Hanya untuk analisis sensitivitas, BUKAN fitur
-CC_EXPLICIT_MI_PATTERN = r"\b(stemi|nstemi|mi|acs|code stemi|cath|myocardial infarction)\b"
+CC_EXPLICIT_MI_PATTERN = r"\b(?:stemi|nstemi|mi|acs|code stemi|cath|myocardial infarction)\b"
 
 # ---------------------------------------------------------------------------
 # Golongan obat dari medrecon (kolom `name`, huruf kecil)
