@@ -4,7 +4,7 @@ Tujuan: memastikan Dataset -> LeadStandardizer -> ResNet1D -> loss -> backward -
 metrik berjalan ujung ke ujung dan loss turun. Data sedikit, jadi angka validasi
 tidak bermakna sebagai performa. Hanya fold 0-16 yang dipakai.
 
-Jalankan dari root repo (setelah run_signal_qc_brief):
+Jalankan dari root repo (setelah run_stage1_subset; default membaca signal_qc_stage1.csv):
     python -u -m src.model.train_smoke
     python -u -m src.model.train_smoke --shuffle-labels      # kontrol: label diacak
     python -u -m src.model.train_smoke --val-source folds    # validasi = fold 14-16
@@ -29,7 +29,7 @@ from src.model.metrics import evaluate
 from src.model.resnet1d import resnet1d
 
 ROOT = Path(__file__).resolve().parents[2]
-QC_CSV = ROOT / "data/interim/signal_qc_brief.csv"
+QC_CSV = ROOT / "data/interim/signal_qc_stage1.csv"
 OUT_DIR = ROOT / "data/interim"
 
 
@@ -39,14 +39,35 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
+def pick_device(name: str) -> torch.device:
+    if name == "auto":
+        name = "cuda" if torch.cuda.is_available() else "cpu"
+    if name == "cuda" and not torch.cuda.is_available():
+        raise SystemExit("--device cuda diminta, tetapi torch.cuda tidak tersedia.")
+    return torch.device(name)
+
+
 @torch.no_grad()
-def predict(model: nn.Module, loader: DataLoader) -> tuple[np.ndarray, np.ndarray]:
+def predict(model: nn.Module, loader: DataLoader, device: torch.device | str = "cpu") -> tuple[np.ndarray, np.ndarray]:
     model.eval()
     ys, ps = [], []
     for x, y in loader:
-        ps.append(torch.sigmoid(model(x)).squeeze(1).numpy())
+        ps.append(torch.sigmoid(model(x.to(device))).squeeze(1).cpu().numpy())
         ys.append(y.squeeze(1).numpy())
     return np.concatenate(ys).astype(int), np.concatenate(ps)
+
+
+def save_checkpoint(path: Path, model: nn.Module, epoch: int, args: dict, extra: dict | None = None) -> None:
+    """Simpan bobot (di CPU) + metadata sederhana; dimuat dengan weights_only=True."""
+    meta = {k: (str(v) if isinstance(v, Path) else v) for k, v in {**args, **(extra or {})}.items()}
+    torch.save({"model_state": {k: v.detach().cpu() for k, v in model.state_dict().items()},
+                "epoch": int(epoch), "meta": meta}, path)
+
+
+def load_checkpoint(path: Path, model: nn.Module) -> dict:
+    ckpt = torch.load(path, map_location="cpu", weights_only=True)
+    model.load_state_dict(ckpt["model_state"])
+    return ckpt
 
 
 def main() -> None:
@@ -56,12 +77,16 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--shuffle-labels", action="store_true", help="kontrol negatif: acak label training")
+    ap.add_argument("--qc-csv", type=Path, default=QC_CSV, help="hasil QC (kolom ed_stay_id, signal_ok)")
+    ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     ap.add_argument("--val-source", choices=["internal", "folds"], default="internal",
                     help="internal = internal_val_0_16 (sesuai brief); folds = fold 14-16 sebagai validasi")
     args = ap.parse_args()
     set_seed(args.seed)
+    device = pick_device(args.device)
+    print("device:", device, f"({torch.cuda.get_device_name(0)})" if device.type == "cuda" else "")
 
-    table = load_record_table(QC_CSV, MASTER, range(0, 17))
+    table = load_record_table(args.qc_csv, MASTER, range(0, 17))
     if args.val_source == "internal":
         train_t, val_t = split_train_val(table)
     else:
@@ -92,8 +117,8 @@ def main() -> None:
     train_eval = DataLoader(train_ds, batch_size=64)
     val_loader = DataLoader(val_ds, batch_size=64)
 
-    model = resnet1d()
-    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([n_neg / n_pos]))
+    model = resnet1d().to(device)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([n_neg / n_pos], device=device))
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     history = []
@@ -103,13 +128,14 @@ def main() -> None:
         total, count = 0.0, 0
         for x, y in train_loader:
             optimizer.zero_grad()
+            x, y = x.to(device), y.to(device)
             loss = criterion(model(x), y)
             loss.backward()
             optimizer.step()
             total += loss.item() * len(x)
             count += len(x)
-        y_tr, p_tr = predict(model, train_eval)
-        y_va, p_va = predict(model, val_loader)
+        y_tr, p_tr = predict(model, train_eval, device)
+        y_va, p_va = predict(model, val_loader, device)
         tr, va = evaluate(y_tr, p_tr), evaluate(y_va, p_va)
         history.append({"epoch": epoch, "train_loss": total / count,
                         "train_auroc": tr["roc_auc"], "val_auroc": va["roc_auc"], "val_prauc": va["pr_auc"]})
@@ -117,7 +143,15 @@ def main() -> None:
 
     final_val = evaluate(y_va, p_va, threshold=0.5)
     out_json = OUT_DIR / f"smoke_train_metrics_{tag}.json"
-    out_json.write_text(json.dumps({"args": vars(args), "history": history, "val_at_0.5": final_val}, indent=2))
+    out_json.write_text(json.dumps({"args": vars(args), "history": history, "val_at_0.5": final_val},
+                                   indent=2, default=str))
+
+    ckpt_path = OUT_DIR / f"smoke_checkpoint_{tag}.pt"
+    save_checkpoint(ckpt_path, model, args.epochs, vars(args), {"n_train": len(train_t), "n_pos_train": n_pos})
+    reloaded = resnet1d().to(device)
+    load_checkpoint(ckpt_path, reloaded)
+    _, p_re = predict(reloaded, val_loader, device)
+    same = bool(np.allclose(p_va, p_re, atol=1e-4))
 
     first, last = history[0], history[-1]
     print("\n=== RINGKASAN UJI-ASAP (bukan performa model) ===")
@@ -126,6 +160,7 @@ def main() -> None:
     print(f"AUROC training akhir: {last['train_auroc']:.3f} | AUROC validasi akhir: {last['val_auroc']:.3f} "
           f"(n_val={final_val['n']}, positif={final_val['n_pos']}; terlalu kecil untuk disimpulkan)")
     print("Validasi @0.5 -> tn/fp/fn/tp:", final_val["tn"], final_val["fp"], final_val["fn"], final_val["tp"])
+    print(f"Checkpoint: {ckpt_path.relative_to(ROOT)} | dimuat ulang -> prediksi validasi identik: {same}")
     print("Detail lokal:", out_json.relative_to(ROOT))
 
 

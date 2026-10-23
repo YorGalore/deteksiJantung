@@ -4,3 +4,6 @@
    pyyaml
    pytest
    ipykernel
+wfdb
+scipy
+torch

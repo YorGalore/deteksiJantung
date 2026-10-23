@@ -26,7 +26,7 @@ def relative_path(file_name, prefix: str) -> str:
 
 
 def load_record_table(qc_csv: Path, master_parquet: Path, folds,
-                      allow_locked: bool = False) -> pd.DataFrame:
+                      allow_locked: bool = False, extra_cols=()) -> pd.DataFrame:
     """Gabungkan hasil QC (signal_ok == 1) dengan master; saring menurut fold."""
     folds = sorted(set(int(f) for f in folds))
     if not allow_locked and any(f >= FOLD_META for f in folds):
@@ -34,8 +34,9 @@ def load_record_table(qc_csv: Path, master_parquet: Path, folds,
 
     qc = pd.read_csv(qc_csv)
     qc = qc[qc["signal_ok"] == 1][["ed_stay_id"]]
-    master = pd.read_parquet(master_parquet,
-                             columns=["ed_stay_id", "file_name", FOLD_COL, "label_ami", VAL_COL])
+    cols = ["ed_stay_id", "file_name", FOLD_COL, "label_ami", VAL_COL]
+    cols += [c for c in extra_cols if c not in cols]
+    master = pd.read_parquet(master_parquet, columns=cols)
     df = qc.merge(master, on="ed_stay_id", how="left", validate="one_to_one")
     if df["file_name"].isna().any():
         raise ValueError("Ada ed_stay_id di hasil QC yang tidak ada di tabel master.")

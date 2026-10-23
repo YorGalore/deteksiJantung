@@ -95,3 +95,43 @@ def test_read_ecg_record_keeps_names_and_nan(tmp_path):
     assert fs == 500 and got == names and loaded.shape == (5000, 12)
     assert np.isnan(loaded[250, 1])
     assert np.isfinite(prepare_ecg(loaded, fs, got)).all()
+
+
+def _write(tmp_path, units, name="rec"):
+    names = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+    wfdb.wrsamp(name, fs=500, units=units, sig_name=names, p_signal=_signal(),
+                fmt=["16"] * 12, write_dir=str(tmp_path))
+    return tmp_path / name
+
+
+def test_read_ecg_record_accepts_mv_any_case(tmp_path):
+    sig, fs, _ = read_ecg_record(_write(tmp_path, ["mV"] * 6 + ["MV"] * 6))
+    assert sig.shape == (5000, 12) and fs == 500
+
+
+@pytest.mark.parametrize("units", [
+    ["uV"] * 12,                      # bukan mV
+    ["mV"] * 11 + ["uV"],             # tidak konsisten
+    ["mV"] * 11 + [""],               # kosong (wfdb diam-diam menganggapnya mV)
+])
+def test_read_ecg_record_rejects_non_mv_units(tmp_path, units):
+    with pytest.raises(ValueError, match="unit_invalid"):
+        read_ecg_record(_write(tmp_path, units))
+
+
+def test_read_ecg_record_rejects_header_without_unit_token(tmp_path):
+    base = _write(tmp_path, ["mV"] * 12)
+    hea = base.with_suffix(".hea")
+    lines = hea.read_text().splitlines()
+    lines[1] = lines[1].replace("/mV", "")          # satuan lead pertama dihapus
+    hea.write_text("\n".join(lines) + "\n")
+    with pytest.raises(ValueError, match="unit_invalid"):
+        read_ecg_record(base)
+
+
+def test_validate_units_mv_rejects_wrong_count_and_none():
+    from src.dataset.ecg_loader import validate_units_mv
+    with pytest.raises(ValueError, match="unit_invalid"):
+        validate_units_mv(["mV"] * 11, 12)
+    with pytest.raises(ValueError, match="unit_invalid"):
+        validate_units_mv(None, 12)

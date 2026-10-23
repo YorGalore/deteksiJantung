@@ -82,3 +82,16 @@ def test_ecg_urls():
     urls = ecg_download_urls(master.head(1))
     assert urls[0].endswith(".hea") and urls[1].endswith(".dat")
     assert urls[0].startswith("https://physionet.org/files/mimic-iv-ecg/1.0/files/")
+
+
+def test_build_master_never_treats_unchecked_as_pass():
+    from src.dataset.signal_qc_core import (
+        DOWNLOAD_FAILED, NOT_PROCESSED, PASS, QC_FAIL, build_contract)
+    labeled, emr, mm = _inputs()
+    ids = list(labeled["ed_stay_id"])
+    status = pd.DataFrame({"ed_stay_id": ids[:4], "status": [PASS, QC_FAIL, DOWNLOAD_FAILED, PASS]})
+    qc = build_contract(status, ids)                      # sisanya not_processed
+    master, info = build_master(labeled, emr, mm, signal_qc=qc)
+    assert len(master) == 2 and (master["signal_ok"] == 1).all()
+    assert info["signal_fail"] == 1 and info["signal_missing"] == len(ids) - 3
+    assert (qc["status"] == NOT_PROCESSED).sum() == len(ids) - 4
