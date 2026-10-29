@@ -76,3 +76,33 @@ Mengoreksi/melengkapi entri "Skala data M1: tahap 2a" di atas. Tidak ada keputus
 2. **pos_weight.** `train_m1` memakai `pos_weight = n_neg/n_pos` dari data training setelah sampling (11.152/3.683 = 3,03). Angka sekitar 30 di brief 10.4 adalah rasio pada data penuh (110.229 negatif / 3.683 positif = 29,9). Negatif yang diambil 10,1% dari 110.229, sehingga tiap negatif sampel mewakili sekitar 9,9 negatif; 29,9 / 9,9 = 3,03. Jadi 3,03 pada sampel setara secara efektif dengan sekitar 30 pada data penuh (bobot relatif positif terhadap negatif sama; hanya skala total yang berbeda). Memakai 30 pada sampel akan memberi bobot positif sekitar 10x terlalu besar. Probabilitas keluaran tetap tidak terkalibrasi ke prevalensi asli; kalibrasi di fold 18 (Orang 3). Transformasi monoton tidak mengubah AUROC/AUPRC.
 3. **Validasi diperkaya.** Validasi internal berisi sekitar 26,5% positif; dipakai hanya untuk early stopping, bukan untuk melaporkan AUPRC. Validasi berprevalensi asli opsional (sekitar 11.100 rekaman tambahan, sekitar 17-18 jam unduhan) dan hanya dilakukan jika tim menginginkannya.
 4. **signal_qc_stage2a.csv hanya untuk subset 2a** (16.536 baris), dibaca oleh `train_m1`. Bukan `signal_qc.csv` dan tidak dipakai `build_master`. Kontrak QC seluruh master dibuat nanti dengan `build_contract` atas semua `ed_stay_id` master, setelah tim memutuskan perlakuan baris tanpa sinyal di fold 0-16 (rekaman yang tidak diproses berstatus `not_processed` dan tidak dihitung lolos). Jangan menyalin berkas stage menjadi `signal_qc.csv`.
+
+
+## 2026-10-29 — Hasil M1 (tahap 2a), QC fold 17-18, dan serah terima prediksi ke Orang 3
+
+**Keputusan / status (Orang 2):**
+1. M1 (ResNet-1D, dari nol) dilatih pada tahap 2a sesuai entri 2026-10-23 dan PROJECT_BRIEF 7.2 dan 10.4: seed 42, CPU, `train = fold <= 16 & internal_val_0_16 == 0`, `val = internal_val_0_16 == 1`, `pos_weight = n_neg/n_pos` = 3,03, early stopping pada AUPRC validasi (patience 5), AdamW lr 1e-3. Training 14.816 rekaman (3.680 positif), validasi 1.700 rekaman (450 positif); turun dari rencana 14.835/1.701 karena 20 rekaman tidak lolos (lihat QC di bawah). Memuat dan praproses 788 detik.
+2. Checkpoint terbaik epoch 12: AUROC validasi 0,855 dan AUPRC validasi 0,715. Early stopping berhenti di epoch 17. Setelah epoch 12 loss training terus turun sementara metrik validasi memburuk (overfitting); checkpoint yang dipakai tetap epoch 12. Validasi berisi sekitar 26,5% positif, jadi AUPRC ini BUKAN performa pada prevalensi asli (3,2%) dan tidak boleh dibandingkan langsung dengan hasil akhir.
+3. Prediksi M1 untuk fold 17 dan 18 ditulis ke `predictions/M1_fold17.parquet` (7.512 baris, 210 positif) dan `predictions/M1_fold18.parquet` (7.520 baris, 218 positif) dengan kontrak PROJECT_BRIEF 12.1. `y_prob` belum terkalibrasi; kalibrasi dan threshold di fold 18 dikerjakan Orang 3. Orang 2 tidak menghitung metrik di fold 17/18. Fold 19 belum disentuh (tidak diunduh, tidak diprediksi) dan tetap dikunci sampai rencana analisis disepakati (brief 11.5).
+4. Paket serah terima untuk Orang 3 (kode, checkpoint, statistik standardisasi, catatan) dan paket prediksi dibuat terpisah di luar repo dan dikirim lewat jalur privat tim, bukan lewat Git.
+
+**QC sinyal (aturan brief 10.2, tanpa perubahan aturan):**
+- Tahap 2a (16.536 rekaman, fold 0-16): `pass` 16.516, `qc_fail` 19 (11 karena >=3 lead datar, 8 karena lead dengan >20% NaN), `download_failed` 1 (TimeoutError, fold 13, kegagalan jaringan sesaat). Lolos per label: negatif 12.386 dari 12.402, positif 4.130 dari 4.134. Kegagalan tersebar 0-3 per fold. `amplitude_flag` (>20 mV, informatif) pada 35 rekaman; clipping +-3 mV dan tidak adanya hard fail 8 mV tidak diubah.
+- Fold 17 dan 18 (15.042 rekaman): `pass` 15.032 (fold 17: 7.512, fold 18: 7.520), `qc_fail` 9 (7 lead NaN, 2 lead datar; fold 17: 5, fold 18: 4), `download_failed` 1 (HTTPError, fold 17). Positif 428 dari 428 lolos; negatif 14.604 dari 14.614. `amplitude_flag` pada 46 rekaman. Aturan QC tidak memakai label; hasil QC tidak dipakai untuk menyetel apa pun.
+
+**Koreksi perkiraan:** entri dan pesan sebelumnya memperkirakan fold 17-18 sekitar 21 ribu rekaman. Angka sebenarnya 15.042. Dengan total fold 17-19 sebesar 22.269 rekaman dan 688 positif, fold 19 sekitar 7.227 rekaman dan 260 positif (turunan aritmetika, belum dihitung dari tabel master).
+
+**Perbedaan dari PROJECT_BRIEF (dicatat, bukan disembunyikan):**
+- M1 dilatih pada subset fold 0-16 (positif penuh + negatif 3x), bukan seluruh data (brief 10.4). `pos_weight` 3,03 setara efektif dengan sekitar 30 pada data penuh (lihat klarifikasi 2026-10-23).
+- Validasi internal diperkaya positif (sekitar 26,5%); dipakai hanya untuk early stopping.
+- Training di CPU (torch +cpu); GPU belum dipakai. Penyimpanan praproses ke memmap/HDF5 (brief 10.3 langkah 7) belum dibuat.
+- `signal_qc.csv` penuh (149.003 `ed_stay_id`) dan `master_table_v1` BELUM ada. Berkas `signal_qc_stage2a.csv` dan `signal_qc_eval.csv` hanya subset dan tidak dipakai `build_master`.
+
+**Terbuka / butuh keputusan tim (tidak diputuskan sepihak oleh Orang 2):**
+- D1: jalur unduhan untuk sisa kohort. Laju terukur sekitar 5-10 rekaman/menit (batas PhysioNet sekitar 2,5 KB/detik per koneksi, maksimal 8 koneksi); server tidak mengirim `.dat` terkompresi (tanpa `Content-Encoding`). Bucket AWS publik `s3://physionet-open/mimic-iv-ecg/` ternyata kosong; halaman dataset tidak menyebut bucket GCS. Opsi yang masih ada: uji kecepatan ZIP resmi 33,8 GB, kemungkinan akses cloud lewat pengaturan PhysioNet, atau penyesuaian lingkup. Tidak ada anggota tim yang memiliki salinan sinyal.
+- D2: perlakuan rekaman yang benar-benar tidak tersedia di server (saat ini 1 rekaman di fold 17) apakah dikeluarkan dari v1 sebagai "sinyal tidak tersedia".
+- D3: toleransi pembuatan `master_table_v1` (hanya jika tidak ada ID tanpa hasil QC, atau batas yang disepakati).
+- D4: pemilik dan lokasi kode M4 (XGBoost dilatih ulang pada v1), versi Python tim, dan penambahan `xgboost` ke requirements.
+- D5: QC fold 19 dengan aturan yang sama (tanpa tuning) agar semua model dinilai pada kunjungan yang sama; prediksi tetap dikunci.
+
+**Keterbatasan bukti:** AUROC/AUPRC di atas dari validasi internal yang kecil dan diperkaya positif, satu kali jalan (seed 42), tanpa interval kepercayaan. Perkiraan waktu unduhan adalah ekstrapolasi kasar dari laju yang berubah-ubah. Konfirmasi Orang 1 dan Orang 3 atas skala 2a (entri 2026-10-23) belum tercatat di log ini.
