@@ -49,3 +49,19 @@ def test_cam_localizes_planted_segment():
     x = torch.randn(8, 12, 1000) * 0.3; x[:, :, 400:600] += 2.0
     cam = grad_cam_1d(m, x).mean(axis=0)
     assert cam[400:600].mean() > cam[:300].mean()
+
+
+def test_summarize_xai_shapes_and_random_comparison():
+    import numpy as np
+    from src.model.resnet1d import resnet1d
+    from src.xai.run_xai_sanity import summarize_xai
+    torch.manual_seed(0)
+    x = torch.randn(8, 12, 1000)
+    y = np.array([1, 1, 1, 1, 0, 0, 0, 0])
+    m = resnet1d()
+    r = summarize_xai(m, resnet1d(), x, y)
+    assert r["n_pos"] == 4 and r["n_neg"] == 4
+    assert r["occ_pos"].shape == (12,) and r["cam_neg"].shape == (10,)
+    assert -1.0 <= r["corr_random_median"] <= 1.0
+    r_same = summarize_xai(m, m, x, y)
+    assert r_same["corr_random_median"] > 0.99          # model sama -> korelasi ~1 (alat ukurnya bekerja)
