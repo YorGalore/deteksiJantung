@@ -106,3 +106,17 @@ Mengoreksi/melengkapi entri "Skala data M1: tahap 2a" di atas. Tidak ada keputus
 - D5: QC fold 19 dengan aturan yang sama (tanpa tuning) agar semua model dinilai pada kunjungan yang sama; prediksi tetap dikunci.
 
 **Keterbatasan bukti:** AUROC/AUPRC di atas dari validasi internal yang kecil dan diperkaya positif, satu kali jalan (seed 42), tanpa interval kepercayaan. Perkiraan waktu unduhan adalah ekstrapolasi kasar dari laju yang berubah-ubah. Konfirmasi Orang 1 dan Orang 3 atas skala 2a (entri 2026-10-23) belum tercatat di log ini.
+
+## 2026-11-05 — Unduhan ZIP resmi, QC sinyal penuh, dan kontrak signal_qc.csv
+
+**Jalur unduhan (penyimpangan dari brief 10.1).** Brief 10.1 meminta hanya ECG kohort yang diunduh (daftar URL). Jalur per rekaman ≈2,5 KB/s per koneksi (maks. 8 koneksi), terlalu lambat untuk ±117 ribu rekaman sisa, dan tim tidak memiliki jalur lebih cepat (keputusan D1). Dipakai ZIP resmi PhysioNet `mimic-iv-ecg-1.0.zip` (36.295.288.053 byte, 1.601.077 anggota) lewat unduhan Range yang dapat dilanjutkan (`src/dataset/download_zip.py`, ukuran dan ETag diperiksa, struktur ZIP terbaca). Hanya rekaman kohort yang diekstrak ke `data/raw/ecg_cache/` (`src/dataset/extract_zip_records.py`); sisa isi ZIP tidak dipakai.
+
+**Verifikasi.** Seluruh 149.003 file_name master ada di ZIP (.hea dan .dat). Ekstraksi folds 0–18: 141.776 rekaman, 109.924 diekstrak baru dan 31.852 rekaman unduhan lama dibandingkan byte per byte dengan ZIP: seluruhnya identik. CRC ZIP dan ukuran .dat dari header lolos untuk semua rekaman; tidak ada yang hilang, rusak, atau salah ukuran. Fold 19 diekstrak dengan flag eksplisit (hanya menyalin berkas, tanpa label/model).
+
+**Rekaman fold 17 yang dulu HTTP 500.** Pada 26 dan 29 Oktober satu rekaman fold 17 gagal diunduh (HTTP 500 pada .hea dan .dat) dan diduga tidak tersedia. Ternyata rekaman itu ada dan utuh di ZIP resmi, sehingga keputusan D2 (mengeluarkannya dari master_table_v1 sebagai "sinyal tidak tersedia") tidak diperlukan; rekaman itu diperlakukan seperti lainnya sesuai hasil QC.
+
+**Keputusan tim (2 November).** D1: tidak ada jalur unduhan yang lebih cepat dari tim. D2: rekaman HTTP 500 dikeluarkan bila memang tidak tersedia (kini tidak relevan, lihat di atas). D3: terserah; dipakai default kontrak hanya ditulis bila setiap ed_stay_id master punya status akhir (pass/qc_fail/preprocess_fail/load_fail), dijaga oleh `build_signal_qc.py`. D4: Python 3.14.10. D5: QC fold 19 boleh dengan aturan yang sama tanpa tuning; prediksi fold 19 tetap terkunci.
+
+**QC sinyal penuh (aturan brief tidak diubah, tanpa tuning).** 149.003 rekaman: 148.861 lolos, 142 qc_fail (0,10%): 85 `three_or_more_flat_leads`, 57 `lead_nan_over_20pct`; tidak ada load_fail/preprocess_fail. Tingkat lolos 0,999 untuk label 0 (144.043/144.181) dan label 1 (4.818/4.822). Gagal per fold 1–14 (fold 19: 10 dari 7.227). amplitude_flag (>20 mV, informasional): 360 rekaman lolos. Hasil QC fold evaluasi hanya dilaporkan agregat dan tidak dipakai mengubah aturan.
+
+**Kontrak.** `data/interim/signal_qc.csv` (ed_stay_id, signal_ok; 149.003 baris, 148.861 bernilai 1 dan 142 bernilai 0) dan `signal_qc_status.csv` (status lengkap) dibuat lewat `python -m src.dataset.build_signal_qc`. Berkas lokal, tidak di-commit. master_table_draft.parquet tidak diubah.
