@@ -159,3 +159,16 @@ Mengoreksi/melengkapi entri "Skala data M1: tahap 2a" di atas. Tidak ada keputus
 9. Catatan teknis tim (macOS): torch dan xgboost masing-masing membawa pustaka OpenMP (`libomp`). Bila keduanya termuat di satu proses Python, training XGBoost bisa segmentation fault (terjadi 2026-11-14 saat `pytest` penuh). Aturan: model tabular dan SHAP dijalankan di proses terpisah dari kode M1/XAI EKG (`python -m ...` masing-masing), dan tes XGBoost dijalankan di subprocess. Mac butuh `brew install libomp` untuk XGBoost.
 
 **Disetujui oleh:** Orang 3 (Dini). Tanggal: 14 Nov
+
+## 2026-11-14 — Spesifikasi meta-learner M5 dan M6 (Orang 3) (DIKUNCI sebelum training)
+
+**Keputusan:**
+1. M5 (late fusion utama, Jalur A) = regresi logistik pada logit p_M1 dan logit p_M2. M6 (late fusion tabular) = regresi logistik pada logit p_M3 dan logit p_M2. Keduanya dilatih HANYA di fold 17, pada kunjungan yang sama di semua input (inner join `ed_stay_id`; `study_id` wajib sama antar-input).
+2. Input = logit probabilitas mentah model dasar (dipotong ke [1e-6, 1-1e-6]), distandarkan dengan rata-rata/SD fold 17. Probabilitas terkalibrasi tidak dipakai sebagai input karena kalibrasi Platt adalah transformasi linear pada skala logit dan diserap oleh regresi logistik (diuji di `tests/test_meta.py`).
+3. Regularisasi L2 ringan, C = 1 (formulasi scikit-learn: C * jumlah log-loss + 0,5 * ||w||^2, intercept tidak dipenalti). C tidak dituning: tidak ada data validasi terpisah di fold 17, dan fold 18 tidak boleh dipakai untuk memilih. Implementasi NumPy (`src/model/meta_learner.py`, metode Newton dengan Hessian eksak; berhenti bila Newton decrement <= 1e-14 x |f|), diverifikasi sama dengan scikit-learn (selisih maksimum 2,6e-7 di 27 skenario) dan lolos uji stres 20.000 fit bootstrap tanpa kegagalan; tanpa scikit-learn agar aman bersama torch di macOS. Versi awal (v3) memakai L-BFGS-B dengan toleransi terlalu ketat sehingga berstatus ABNORMAL di macOS; diganti sebelum meta-learner dilatih pada data asli.
+4. Gerbang rencana proyek 3.4: fold 17 berisi 210 positif (>= 100), jadi cross-fitting tidak diperlukan. Kode berhenti bila positif fold 17 < 100.
+5. XAI fusion: koefisien terstandar (per 1 SD logit), odds ratio per 1 SD, dan CI 95% bootstrap per `subject_id` (2000x, standardisasi dan fit diulang di setiap sampel). Porsi |koefisien| hanya gambaran bobot relatif, bukan dekomposisi kausal, karena input berkorelasi.
+6. Prediksi: fold 18 saja (fold 17 adalah data latih meta-learner). Fold 19 hanya dengan `--include-fold-19` setelah prediksi fold 19 model dasar tersedia dan rencana analisis dikunci.
+7. Kalibrasi Platt dan threshold M5/M6 ditentukan di fold 18 dengan aturan yang sama seperti model lain (`src/evaluation/run_fold18.py`).
+
+**Disetujui oleh:** Orang 3 (Dini). Tanggal: 14 Nov
