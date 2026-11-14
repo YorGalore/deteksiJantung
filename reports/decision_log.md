@@ -128,3 +128,18 @@ Mengoreksi/melengkapi entri "Skala data M1: tahap 2a" di atas. Tidak ada keputus
 **XAI M1,** hanya validasi internal fold 0-16 (150 AMI + 150 non-AMI, seed 42; fold 17-19 tidak disentuh; src/xai/run_xai_sanity.py, run_xai_faithfulness.py). Uji acak-bobot: korelasi Grad-CAM model terlatih vs model acak median -0,04 (p90 0,18), jadi peta bergantung pada bobot terlatih. Faithfulness waktu (menolkan 4 dari 20 blok 0,5 detik): pada AMI penurunan logit wilayah Grad-CAM tertinggi 0,94, acak 0,70, terendah 0,37; selisih top-acak 0,24 (CI95 0,18-0,30; 81% rekaman). Pada non-AMI efeknya kecil (selisih 0,09; 56% rekaman). Profil Grad-CAM relatif datar sepanjang rekaman, sehingga lokalisasinya sedang dan bukan penunjuk segmen ST. Uji lead (menolkan 3 dari 12 lead) berselisih besar tetapi hampir melingkar karena skor oklusi dihitung dengan perturbasi yang sama; tidak dipakai sebagai bukti faithfulness.
 
 **Keputusan:** hasil ini eksploratif. Klaim klinis tentang lead atau segmen tertentu tidak dibuat. Batasan: satu seed, n=150 per kelas, validasi diperkaya positif, perturbasi nol di luar distribusi. Tidak ada perubahan pada model, QC, atau preprocessing.
+## 2026-11-14 — Skala data M1 tahap 2a disetujui sebagai M1 final; M4 dipegang Orang 3; lokasi kode Orang 3 (DISETUJUI)
+
+**Keputusan:**
+1. M1 tahap 2a (entri 2026-10-23 dan 2026-10-29: semua positif fold 0-16 + 3x negatif acak, seed 42; 16.516 rekaman lolos QC, sekitar 13% dari 126.734 rekaman fold 0-16) dipakai sebagai M1 final. M1 tidak dilatih ulang pada data penuh. Ini menutup butir "Konfirmasi Orang 1 dan Orang 3 atas skala 2a belum tercatat" pada entri 2026-10-29.
+2. Persetujuan ini dicatat SEBELUM metrik M1 pada fold 17 atau fold 18 dihitung oleh siapa pun, sehingga keputusan tidak dipengaruhi hasil evaluasi.
+3. M4 (XGBoost EMR + MM, training fold 0-17 dengan `internal_val_0_17 == 0`, early stopping pada `internal_val_0_17 == 1`) dikerjakan Orang 3 (menutup D4 bagian pemilik M4).
+4. Kode Orang 3: model tabular di `src/model/`, evaluasi di `src/evaluation/`, dikerjakan di branch `evaluation`.
+
+**Alasan:** keterbatasan waktu dan komputasi (training M1 di CPU; penyimpanan praproses memmap/HDF5 belum dibuat; memuat 2a saja butuh sekitar 788 detik).
+
+**Konsekuensi untuk pelaporan (keterbatasan, wajib disebut di laporan):**
+- M1, dan karena itu M5, belajar dari data EKG yang jauh lebih sedikit (sekitar 13% fold 0-16) dibanding M2/M3 (fold 0-16 penuh) dan M4 (fold 0-17 penuh). Perbandingan utama M5 vs M4 dan perbandingan M1 vs M3 harus menyertakan catatan ini; selisih yang tidak menguntungkan M5/M1 tidak bisa dipisahkan dari efek jumlah data latih.
+- Probabilitas M1 tidak terkalibrasi terhadap prevalensi asli (negatif disubsampel, `pos_weight` 3,03). Kalibrasi Platt dan threshold ditentukan di fold 18 oleh Orang 3.
+
+**Disetujui oleh:** Orang 1 (Anna), Orang 3 (Dini). Tanggal persetujuan: 14 Nov
