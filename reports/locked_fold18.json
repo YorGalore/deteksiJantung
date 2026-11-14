@@ -1,0 +1,25 @@
+{
+  "M1": {
+    "fold": 18,
+    "n": 7520,
+    "n_pos": 218,
+    "predictions_sha256": "0295de7df6778740e6bcd078176b8f63365f81b7164ccafd3cf0e211d93bb7dc",
+    "calibration": {
+      "method": "platt",
+      "a": -3.399537769887471,
+      "b": 0.7273285708581553
+    },
+    "threshold_rule_out": {
+      "target_sensitivity": 0.9,
+      "y_prob_raw": 0.3028267025947571,
+      "y_prob_calibrated": 0.017879878449535102
+    },
+    "threshold_rule_in": {
+      "target_specificity": 0.9,
+      "y_prob_raw": 0.7114877104759217,
+      "y_prob_calibrated": 0.060481150953430325
+    },
+    "rule": "positif bila y_prob_raw >= threshold (setara dengan skala terkalibrasi karena Platt monoton naik)",
+    "created_utc": "2026-11-14T10:25:34+00:00"
+  }
+}
