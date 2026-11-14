@@ -127,3 +127,65 @@ CI bootstrap @rule-out: sens 0.904 [0.859, 0.943], spes 0.581 [0.564, 0.600], NP
 | 8 | 752 | 0.0329 | 0.0359 |
 | 9 | 752 | 0.0581 | 0.0505 |
 | 10 | 752 | 0.1502 | 0.1556 |
+
+## M5
+
+- Kunjungan: 7,520 | positif: 218 | prevalensi: 2.90% (garis dasar AUPRC = prevalensi)
+- AUROC: 0.883 [0.862, 0.903] | AUPRC: 0.276 [0.217, 0.344]  (CI 95% bootstrap per subject_id)
+- Probabilitas mentah: Brier 0.024, intercept kalibrasi 0.005, slope 0.977 (ideal 0 dan 1)
+- Platt (fit di fold 18): a = -0.0537, b = 0.9767 | Brier setelah kalibrasi 0.024 (in-sample)
+
+**Threshold (dipilih di fold 18; metrik di bawah in-sample, bukan hasil akhir)**
+
+| threshold | y_prob_raw | sens | spes | PPV | NPV | F1 | TP | FP | FN | TN |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Rule-out (sens >= 0,90) | 0.0172195 | 0.904 | 0.675 | 0.077 | 0.996 | 0.141 | 197 | 2,376 | 21 | 4,926 |
+| Rule-in (spes >= 0,90) | 0.0661233 | 0.619 | 0.900 | 0.156 | 0.988 | 0.249 | 135 | 730 | 83 | 6,572 |
+
+CI bootstrap @rule-out: sens 0.904 [0.863, 0.942], spes 0.675 [0.658, 0.692], NPV 0.996 [0.994, 0.998], PPV 0.077 [0.065, 0.089]
+
+**Tabel kalibrasi setelah Platt (10 bin berisi jumlah kunjungan sama)**
+
+| bin | n | mean_pred | observed |
+|---|---|---|---|
+| 1 | 752 | 0.0001 | 0.0013 |
+| 2 | 752 | 0.0006 | 0.0 |
+| 3 | 752 | 0.0016 | 0.0027 |
+| 4 | 752 | 0.0032 | 0.0013 |
+| 5 | 752 | 0.0058 | 0.0 |
+| 6 | 752 | 0.0102 | 0.008 |
+| 7 | 752 | 0.0174 | 0.0239 |
+| 8 | 752 | 0.0295 | 0.0346 |
+| 9 | 752 | 0.0534 | 0.0412 |
+| 10 | 752 | 0.1681 | 0.1769 |
+
+## M6
+
+- Kunjungan: 7,520 | positif: 218 | prevalensi: 2.90% (garis dasar AUPRC = prevalensi)
+- AUROC: 0.853 [0.829, 0.877] | AUPRC: 0.168 [0.130, 0.220]  (CI 95% bootstrap per subject_id)
+- Probabilitas mentah: Brier 0.026, intercept kalibrasi 0.043, slope 0.952 (ideal 0 dan 1)
+- Platt (fit di fold 18): a = -0.0851, b = 0.9519 | Brier setelah kalibrasi 0.026 (in-sample)
+
+**Threshold (dipilih di fold 18; metrik di bawah in-sample, bukan hasil akhir)**
+
+| threshold | y_prob_raw | sens | spes | PPV | NPV | F1 | TP | FP | FN | TN |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Rule-out (sens >= 0,90) | 0.0146082 | 0.904 | 0.616 | 0.066 | 0.995 | 0.122 | 197 | 2,807 | 21 | 4,495 |
+| Rule-in (spes >= 0,90) | 0.0700142 | 0.541 | 0.900 | 0.139 | 0.985 | 0.221 | 118 | 730 | 100 | 6,572 |
+
+CI bootstrap @rule-out: sens 0.904 [0.862, 0.942], spes 0.616 [0.598, 0.634], NPV 0.995 [0.993, 0.997], PPV 0.066 [0.056, 0.076]
+
+**Tabel kalibrasi setelah Platt (10 bin berisi jumlah kunjungan sama)**
+
+| bin | n | mean_pred | observed |
+|---|---|---|---|
+| 1 | 752 | 0.0002 | 0.0013 |
+| 2 | 752 | 0.0009 | 0.0 |
+| 3 | 752 | 0.0024 | 0.0013 |
+| 4 | 752 | 0.0047 | 0.0066 |
+| 5 | 752 | 0.0081 | 0.008 |
+| 6 | 752 | 0.013 | 0.0106 |
+| 7 | 752 | 0.0209 | 0.0239 |
+| 8 | 752 | 0.0343 | 0.0279 |
+| 9 | 752 | 0.0595 | 0.0638 |
+| 10 | 752 | 0.1458 | 0.1463 |

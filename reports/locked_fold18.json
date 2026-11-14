@@ -20,7 +20,7 @@
       "y_prob_calibrated": 0.060481150953430325
     },
     "rule": "positif bila y_prob_raw >= threshold (setara dengan skala terkalibrasi karena Platt monoton naik)",
-    "created_utc": "2026-11-14T12:21:25+00:00"
+    "created_utc": "2026-11-14T12:44:36+00:00"
   },
   "M2": {
     "fold": 18,
@@ -43,7 +43,7 @@
       "y_prob_calibrated": 0.0721017505351887
     },
     "rule": "positif bila y_prob_raw >= threshold (setara dengan skala terkalibrasi karena Platt monoton naik)",
-    "created_utc": "2026-11-14T12:21:25+00:00"
+    "created_utc": "2026-11-14T12:44:36+00:00"
   },
   "M3": {
     "fold": 18,
@@ -66,7 +66,7 @@
       "y_prob_calibrated": 0.07260266787172953
     },
     "rule": "positif bila y_prob_raw >= threshold (setara dengan skala terkalibrasi karena Platt monoton naik)",
-    "created_utc": "2026-11-14T12:21:25+00:00"
+    "created_utc": "2026-11-14T12:44:36+00:00"
   },
   "M4": {
     "fold": 18,
@@ -89,6 +89,52 @@
       "y_prob_calibrated": 0.0726560356200795
     },
     "rule": "positif bila y_prob_raw >= threshold (setara dengan skala terkalibrasi karena Platt monoton naik)",
-    "created_utc": "2026-11-14T12:21:25+00:00"
+    "created_utc": "2026-11-14T12:44:36+00:00"
+  },
+  "M5": {
+    "fold": 18,
+    "n": 7520,
+    "n_pos": 218,
+    "predictions_sha256": "4f5811e7ae6e58e0668cd6853173ee76431b0a61a184472a59a98ec4db281602",
+    "calibration": {
+      "method": "platt",
+      "a": -0.05374948769939527,
+      "b": 0.9766588821815094
+    },
+    "threshold_rule_out": {
+      "target_sensitivity": 0.9,
+      "y_prob_raw": 0.017219495706259812,
+      "y_prob_calibrated": 0.01792108739808609
+    },
+    "threshold_rule_in": {
+      "target_specificity": 0.9,
+      "y_prob_raw": 0.06612333103370419,
+      "y_prob_calibrated": 0.0666223937283619
+    },
+    "rule": "positif bila y_prob_raw >= threshold (setara dengan skala terkalibrasi karena Platt monoton naik)",
+    "created_utc": "2026-11-14T12:44:36+00:00"
+  },
+  "M6": {
+    "fold": 18,
+    "n": 7520,
+    "n_pos": 218,
+    "predictions_sha256": "e6caa6e7ce549849221494f5802337bab68032de4ddca6a31831fb21e007bae7",
+    "calibration": {
+      "method": "platt",
+      "a": -0.08510862500503766,
+      "b": 0.9519039900438883
+    },
+    "threshold_rule_out": {
+      "target_sensitivity": 0.9,
+      "y_prob_raw": 0.014608205887415716,
+      "y_prob_calibrated": 0.016398833297696088
+    },
+    "threshold_rule_in": {
+      "target_specificity": 0.9,
+      "y_prob_raw": 0.07001424157651995,
+      "y_prob_calibrated": 0.07261614321959023
+    },
+    "rule": "positif bila y_prob_raw >= threshold (setara dengan skala terkalibrasi karena Platt monoton naik)",
+    "created_utc": "2026-11-14T12:44:36+00:00"
   }
 }
