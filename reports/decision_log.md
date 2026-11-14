@@ -143,3 +143,19 @@ Mengoreksi/melengkapi entri "Skala data M1: tahap 2a" di atas. Tidak ada keputus
 - Probabilitas M1 tidak terkalibrasi terhadap prevalensi asli (negatif disubsampel, `pos_weight` 3,03). Kalibrasi Platt dan threshold ditentukan di fold 18 oleh Orang 3.
 
 **Disetujui oleh:** Orang 1 (Anna), Orang 3 (Dini). Tanggal persetujuan: 14 Nov
+
+## 2026-11-14 — Spesifikasi model tabular M2, M3, M4 (Orang 3) (DIKUNCI sebelum training)
+
+**Keputusan:**
+1. Fitur: M2 = `EMR_FEATURES` (33), M3 = `MM_FEATURES` (10), M4 = keduanya (43), semuanya dari `src/constants.py`. Kode menolak kolom terlarang, label, analisis, dan split (`src/model/tabular.py`, `check_feature_list`).
+2. `arrival_transport`: one-hot dengan kategori tetap AMBULANCE, HELICOPTER, OTHER, UNKNOWN, WALK IN (dicek pada master_table_draft); nilai kosong = semua 0; kategori baru = error. Alasan: SHAP per kategori mudah dibaca dan kolom matriks sama di semua fold.
+3. Pembagian: M2/M3 train fold 0-16 & `internal_val_0_16 == 0`, validasi `internal_val_0_16 == 1`; M4 train fold 0-17 & `internal_val_0_17 == 0`, validasi `internal_val_0_17 == 1`. Fold 17-19 tidak dipakai untuk early stopping atau tuning model dasar.
+4. XGBoost (`tree_method=hist`), `scale_pos_weight = n_neg/n_pos` data training, maksimal 3000 pohon, early stopping 100 putaran pada `aucpr` validasi internal. NaN dibiarkan.
+5. Tuning ringan: random search 20 kombinasi (seed 42; trial 1 = max_depth 4, learning_rate 0,05, min_child_weight 1, subsample 0,8, colsample_bytree 0,8), ruang: max_depth {3,4,5,6,8}, learning_rate {0,02; 0,03; 0,05; 0,1}, min_child_weight {1,3,5,10}, subsample {0,6..1,0}, colsample_bytree {0,5..1,0}. Model dipilih menurut average precision (AUPRC) pada validasi internal. Model terpilih tidak dilatih ulang pada train + validasi.
+6. Prediksi: M2/M3 untuk fold 17 dan 18; M4 hanya fold 18 (fold 17 adalah data latih M4, jadi prediksinya tidak sah dan tidak ditulis). Fold 19 hanya dengan `--include-fold-19` setelah rencana analisis disepakati dan di-commit.
+7. M2/M3/M4 dilatih pada master_table_draft yang difilter signal_ok == 1 dari signal_qc.csv (setara master_table_v1: 148.861 kunjungan), sehingga semua model memakai kunjungan yang sama dengan M1. Bila master_table_v1 resmi dari Orang 1 dipakai kemudian, M2/M3/M4 dilatih ulang dan threshold fold 18 dikunci ulang sebelum fold 19 disentuh.
+8. Selama pengembangan, fold 18 hanya dipakai untuk kalibrasi dan threshold per model; perbandingan antar-model (termasuk M5 vs M4) tidak diputuskan dari fold 18, tetapi dari fold 19 sekali jalan.
+
+9. Catatan teknis tim (macOS): torch dan xgboost masing-masing membawa pustaka OpenMP (`libomp`). Bila keduanya termuat di satu proses Python, training XGBoost bisa segmentation fault (terjadi 2026-11-14 saat `pytest` penuh). Aturan: model tabular dan SHAP dijalankan di proses terpisah dari kode M1/XAI EKG (`python -m ...` masing-masing), dan tes XGBoost dijalankan di subprocess. Mac butuh `brew install libomp` untuk XGBoost.
+
+**Disetujui oleh:** Orang 3 (Dini). Tanggal: 14 Nov
