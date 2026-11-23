@@ -477,6 +477,32 @@ def test_shap_m2_fold18_aggregate_and_consistent(tmp_path):
         assert float(line.rsplit("cek shap", 1)[1].strip()) < 1e-4
 
 
+def test_shap_stability_from_aggregate_csv(tmp_path, monkeypatch):
+    from src.model import shap_tabular as S
+    monkeypatch.setattr(T, "REPORTS", tmp_path)
+    feats = [f"f{i}" for i in range(12)]
+    a = pd.DataFrame({"fitur": feats, "label": [f"Fitur {i}" for i in range(12)], "mean_abs_shap": np.arange(12, 0, -1.0)})
+    b = a.copy()
+    b.loc[[0, 11], "mean_abs_shap"] = b.loc[[11, 0], "mean_abs_shap"].to_numpy()       # tukar teratas dan terbawah
+    a.to_csv(tmp_path / "shap_M2_fold18.csv", index=False)
+    b.to_csv(tmp_path / "shap_M2_fold19.csv", index=False)
+    r = S.stability("M2")
+    assert r["overlap"] == 9 and 0 < r["spearman"] < 1
+    assert "Spearman" in (tmp_path / "shap_M2_stabilitas.md").read_text()
+
+
+def test_shap_complementary_suppression():
+    from src.model import shap_tabular as S
+    rng = np.random.default_rng(0)
+    n = 200
+    x = np.r_[np.ones(5), np.zeros(n - 5)]                       # "= 1" hanya 5 kunjungan
+    X = pd.DataFrame({"cc_chest_pain": x})
+    raw = X.copy()
+    out = S.summarize_groups(X, rng.normal(size=(n, 1)), raw, ["cc_chest_pain"])
+    r = out.iloc[0]
+    assert r["n = 1"] == "<10" and r["n = 0"] == "disembunyikan" and pd.isna(r["SHAP = 1"])
+
+
 @pytest.mark.skipif(not HAS_XGB, reason="xgboost belum terpasang")
 def test_shap_fold19_locked(tmp_path):
     r = run_py(tmp_path, ["from src.model import shap_tabular as S", "S.main(['--model', 'M4', '--fold', '19'])"])

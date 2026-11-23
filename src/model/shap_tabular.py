@@ -4,6 +4,7 @@ Jalankan dari root repo, di proses terpisah dari kode M1/torch (macOS, libomp):
     python -m src.model.shap_tabular --model M2 --fold 18
     python -m src.model.shap_tabular --model M4 --fold 18
     python -m src.model.shap_tabular --model M2 --fold 18 --cek-shap     # cocokkan dengan pustaka shap
+    python -m src.model.shap_tabular --model M2 --stabilitas             # fold 18 vs 19 (setelah keduanya ada)
 
 Nilai SHAP dihitung dengan algoritma TreeSHAP (path-dependent) bawaan XGBoost
 (Booster.predict(pred_contribs=True)), pada iterasi terbaik yang sama dengan prediksi (iteration_range).
@@ -137,10 +138,19 @@ def summarize_groups(X: pd.DataFrame, phi: np.ndarray, raw: pd.DataFrame, featur
                "mean_shap": float(np.mean(v))}
         if kind == "kontinu":
             row["batas Q1 (<=)"], row["batas Q4 (>=)"] = float(q1), float(q3)
+        ns = {}
         for g, mask in groups.items():
             n, mean = group_mean(v, mask)
-            row[f"n {g}"] = cnt(n)
+            ns[g] = n
             row[f"SHAP {g}"] = mean
+        shown = {g: cnt(n) for g, n in ns.items()}
+        if kind in ("biner", "kategori"):                  # kelompok membagi habis kunjungan: supresi komplementer
+            small = [g for g, n in ns.items() if n < MIN_COUNT and n > 0]
+            rest = sorted((n, g) for g, n in ns.items() if n >= MIN_COUNT)
+            if len(small) == 1 and rest:
+                shown[rest[0][1]] = "disembunyikan"
+        for g in ns:
+            row[f"n {g}"] = shown[g]
         rows.append(row)
     out = pd.DataFrame(rows).sort_values("mean_abs_shap", ascending=False).reset_index(drop=True)
     out.insert(0, "peringkat", np.arange(1, len(out) + 1))
@@ -196,13 +206,47 @@ def cek_shap(r: dict, n: int = 500) -> float:
     return float(np.max(np.abs(sv - r["phi"][:n])))
 
 
+def stability(model: str, top: int = 10) -> dict:
+    """Cek stabilitas SHAP global fold 18 vs fold 19 dari dua CSV agregat (rencana analisis, Bagian SHAP):
+    korelasi Spearman peringkat rata-rata |SHAP| semua fitur asal, dan irisan 10 fitur teratas.
+    Deskriptif saja (tanpa ambang lulus/gagal). Tidak membaca data pasien."""
+    from scipy.stats import spearmanr
+    paths = {f: T.REPORTS / f"shap_{model}_fold{f}.csv" for f in (FOLD_THRESHOLD, FOLD_TEST)}
+    missing = [str(p) for p in paths.values() if not p.exists()]
+    if missing:
+        raise SystemExit(f"Belum ada: {missing}. Jalankan SHAP fold 18 dan fold 19 dulu.")
+    a, b = (pd.read_csv(paths[f]).set_index("fitur") for f in (FOLD_THRESHOLD, FOLD_TEST))
+    if set(a.index) != set(b.index):
+        raise SystemExit("Daftar fitur fold 18 dan fold 19 berbeda.")
+    b = b.loc[a.index]
+    rho = float(spearmanr(a["mean_abs_shap"], b["mean_abs_shap"]).statistic)
+    top18 = list(a.sort_values("mean_abs_shap", ascending=False).index[:top])
+    top19 = list(b.sort_values("mean_abs_shap", ascending=False).index[:top])
+    overlap = len(set(top18) & set(top19))
+    lines = [f"# Stabilitas SHAP {model}: fold 18 vs fold 19", "",
+             "Dihasilkan otomatis oleh `src/model/shap_tabular.py --stabilitas`. Deskriptif, tanpa ambang lulus/gagal.", "",
+             f"- Korelasi Spearman peringkat rata-rata |SHAP| ({len(a)} fitur asal): {rho:.3f}",
+             f"- Irisan {top} fitur teratas: {overlap} dari {top}", "",
+             f"| peringkat | fold 18 | fold 19 (hasil utama) |", "|---|---|---|",
+             *[f"| {i + 1} | {a.loc[x, 'label']} | {b.loc[y, 'label']} |" for i, (x, y) in enumerate(zip(top18, top19))], ""]
+    (T.REPORTS / f"shap_{model}_stabilitas.md").write_text("\n".join(lines), encoding="utf-8")
+    print(f"[{model}] stabilitas SHAP fold 18 vs 19: Spearman {rho:.3f} | irisan {top} teratas {overlap}/{top} "
+          f"-> reports/shap_{model}_stabilitas.md")
+    return {"spearman": rho, "overlap": overlap}
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="SHAP global M2/M4 (TreeSHAP XGBoost)")
     ap.add_argument("--model", required=True, choices=SHAP_MODELS)
     ap.add_argument("--fold", type=int, default=FOLD_THRESHOLD, choices=[FOLD_THRESHOLD, FOLD_TEST])
     ap.add_argument("--include-fold-19", action="store_true")
     ap.add_argument("--cek-shap", action="store_true", help="cocokkan dengan pustaka shap (500 baris pertama)")
+    ap.add_argument("--stabilitas", action="store_true",
+                    help="bandingkan CSV SHAP fold 18 dan fold 19 yang sudah ada (tanpa menghitung ulang)")
     a = ap.parse_args(argv)
+    if a.stabilitas:
+        stability(a.model)
+        return
     T.warn_if_torch_loaded()
     lock_info = {}
     if a.fold == FOLD_TEST:
