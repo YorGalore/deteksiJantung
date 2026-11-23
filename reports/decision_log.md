@@ -128,3 +128,174 @@ Mengoreksi/melengkapi entri "Skala data M1: tahap 2a" di atas. Tidak ada keputus
 **XAI M1,** hanya validasi internal fold 0-16 (150 AMI + 150 non-AMI, seed 42; fold 17-19 tidak disentuh; src/xai/run_xai_sanity.py, run_xai_faithfulness.py). Uji acak-bobot: korelasi Grad-CAM model terlatih vs model acak median -0,04 (p90 0,18), jadi peta bergantung pada bobot terlatih. Faithfulness waktu (menolkan 4 dari 20 blok 0,5 detik): pada AMI penurunan logit wilayah Grad-CAM tertinggi 0,94, acak 0,70, terendah 0,37; selisih top-acak 0,24 (CI95 0,18-0,30; 81% rekaman). Pada non-AMI efeknya kecil (selisih 0,09; 56% rekaman). Profil Grad-CAM relatif datar sepanjang rekaman, sehingga lokalisasinya sedang dan bukan penunjuk segmen ST. Uji lead (menolkan 3 dari 12 lead) berselisih besar tetapi hampir melingkar karena skor oklusi dihitung dengan perturbasi yang sama; tidak dipakai sebagai bukti faithfulness.
 
 **Keputusan:** hasil ini eksploratif. Klaim klinis tentang lead atau segmen tertentu tidak dibuat. Batasan: satu seed, n=150 per kelas, validasi diperkaya positif, perturbasi nol di luar distribusi. Tidak ada perubahan pada model, QC, atau preprocessing.
+## 2026-11-14 — Skala data M1 tahap 2a disetujui sebagai M1 final; M4 dipegang Orang 3; lokasi kode Orang 3 (DISETUJUI)
+
+**Keputusan:**
+1. M1 tahap 2a (entri 2026-10-23 dan 2026-10-29: semua positif fold 0-16 + 3x negatif acak, seed 42; 16.516 rekaman lolos QC, sekitar 13% dari 126.734 rekaman fold 0-16) dipakai sebagai M1 final. M1 tidak dilatih ulang pada data penuh. Ini menutup butir "Konfirmasi Orang 1 dan Orang 3 atas skala 2a belum tercatat" pada entri 2026-10-29.
+2. Persetujuan ini dicatat SEBELUM metrik M1 pada fold 17 atau fold 18 dihitung oleh siapa pun, sehingga keputusan tidak dipengaruhi hasil evaluasi.
+3. M4 (XGBoost EMR + MM, training fold 0-17 dengan `internal_val_0_17 == 0`, early stopping pada `internal_val_0_17 == 1`) dikerjakan Orang 3 (menutup D4 bagian pemilik M4).
+4. Kode Orang 3: model tabular di `src/model/`, evaluasi di `src/evaluation/`, dikerjakan di branch `evaluation`.
+
+**Alasan:** keterbatasan waktu dan komputasi (training M1 di CPU; penyimpanan praproses memmap/HDF5 belum dibuat; memuat 2a saja butuh sekitar 788 detik).
+
+**Konsekuensi untuk pelaporan (keterbatasan, wajib disebut di laporan):**
+- M1, dan karena itu M5, belajar dari data EKG yang jauh lebih sedikit (sekitar 13% fold 0-16) dibanding M2/M3 (fold 0-16 penuh) dan M4 (fold 0-17 penuh). Perbandingan utama M5 vs M4 dan perbandingan M1 vs M3 harus menyertakan catatan ini; selisih yang tidak menguntungkan M5/M1 tidak bisa dipisahkan dari efek jumlah data latih.
+- Probabilitas M1 tidak terkalibrasi terhadap prevalensi asli (negatif disubsampel, `pos_weight` 3,03). Kalibrasi Platt dan threshold ditentukan di fold 18 oleh Orang 3.
+
+**Disetujui oleh:** Orang 1 (Anna), Orang 3 (Dini). Tanggal persetujuan: 14 Nov
+
+## 2026-11-14 — Spesifikasi model tabular M2, M3, M4 (Orang 3) (DIKUNCI sebelum training)
+
+**Keputusan:**
+1. Fitur: M2 = `EMR_FEATURES` (33), M3 = `MM_FEATURES` (10), M4 = keduanya (43), semuanya dari `src/constants.py`. Kode menolak kolom terlarang, label, analisis, dan split (`src/model/tabular.py`, `check_feature_list`).
+2. `arrival_transport`: one-hot dengan kategori tetap AMBULANCE, HELICOPTER, OTHER, UNKNOWN, WALK IN (dicek pada master_table_draft); nilai kosong = semua 0; kategori baru = error. Alasan: SHAP per kategori mudah dibaca dan kolom matriks sama di semua fold.
+3. Pembagian: M2/M3 train fold 0-16 & `internal_val_0_16 == 0`, validasi `internal_val_0_16 == 1`; M4 train fold 0-17 & `internal_val_0_17 == 0`, validasi `internal_val_0_17 == 1`. Fold 17-19 tidak dipakai untuk early stopping atau tuning model dasar.
+4. XGBoost (`tree_method=hist`), `scale_pos_weight = n_neg/n_pos` data training, maksimal 3000 pohon, early stopping 100 putaran pada `aucpr` validasi internal. NaN dibiarkan.
+5. Tuning ringan: random search 20 kombinasi (seed 42; trial 1 = max_depth 4, learning_rate 0,05, min_child_weight 1, subsample 0,8, colsample_bytree 0,8), ruang: max_depth {3,4,5,6,8}, learning_rate {0,02; 0,03; 0,05; 0,1}, min_child_weight {1,3,5,10}, subsample {0,6..1,0}, colsample_bytree {0,5..1,0}. Model dipilih menurut average precision (AUPRC) pada validasi internal. Model terpilih tidak dilatih ulang pada train + validasi.
+6. Prediksi: M2/M3 untuk fold 17 dan 18; M4 hanya fold 18 (fold 17 adalah data latih M4, jadi prediksinya tidak sah dan tidak ditulis). Fold 19 hanya dengan `--include-fold-19` setelah rencana analisis disepakati dan di-commit.
+7. M2/M3/M4 dilatih pada master_table_draft yang difilter signal_ok == 1 dari signal_qc.csv (setara master_table_v1: 148.861 kunjungan), sehingga semua model memakai kunjungan yang sama dengan M1. Bila master_table_v1 resmi dari Orang 1 dipakai kemudian, M2/M3/M4 dilatih ulang dan threshold fold 18 dikunci ulang sebelum fold 19 disentuh.
+8. Selama pengembangan, fold 18 hanya dipakai untuk kalibrasi dan threshold per model; perbandingan antar-model (termasuk M5 vs M4) tidak diputuskan dari fold 18, tetapi dari fold 19 sekali jalan.
+
+9. Catatan teknis tim (macOS): torch dan xgboost masing-masing membawa pustaka OpenMP (`libomp`). Bila keduanya termuat di satu proses Python, training XGBoost bisa segmentation fault (terjadi 2026-11-14 saat `pytest` penuh). Aturan: model tabular dan SHAP dijalankan di proses terpisah dari kode M1/XAI EKG (`python -m ...` masing-masing), dan tes XGBoost dijalankan di subprocess. Mac butuh `brew install libomp` untuk XGBoost.
+
+**Disetujui oleh:** Orang 3 (Dini). Tanggal: 14 Nov
+
+## 2026-11-14 — Spesifikasi meta-learner M5 dan M6 (Orang 3) (DIKUNCI sebelum training)
+
+**Keputusan:**
+1. M5 (late fusion utama, Jalur A) = regresi logistik pada logit p_M1 dan logit p_M2. M6 (late fusion tabular) = regresi logistik pada logit p_M3 dan logit p_M2. Keduanya dilatih HANYA di fold 17, pada kunjungan yang sama di semua input (inner join `ed_stay_id`; `study_id` wajib sama antar-input).
+2. Input = logit probabilitas mentah model dasar (dipotong ke [1e-6, 1-1e-6]), distandarkan dengan rata-rata/SD fold 17. Probabilitas terkalibrasi tidak dipakai sebagai input karena kalibrasi Platt adalah transformasi linear pada skala logit dan diserap oleh regresi logistik (diuji di `tests/test_meta.py`).
+3. Regularisasi L2 ringan, C = 1 (formulasi scikit-learn: C * jumlah log-loss + 0,5 * ||w||^2, intercept tidak dipenalti). C tidak dituning: tidak ada data validasi terpisah di fold 17, dan fold 18 tidak boleh dipakai untuk memilih. Implementasi NumPy (`src/model/meta_learner.py`, metode Newton dengan Hessian eksak; berhenti bila Newton decrement <= 1e-14 x |f|), diverifikasi sama dengan scikit-learn (selisih maksimum 2,6e-7 di 27 skenario) dan lolos uji stres 20.000 fit bootstrap tanpa kegagalan; tanpa scikit-learn agar aman bersama torch di macOS. Versi awal (v3) memakai L-BFGS-B dengan toleransi terlalu ketat sehingga berstatus ABNORMAL di macOS; diganti sebelum meta-learner dilatih pada data asli.
+4. Gerbang rencana proyek 3.4: fold 17 berisi 210 positif (>= 100), jadi cross-fitting tidak diperlukan. Kode berhenti bila positif fold 17 < 100.
+5. XAI fusion: koefisien terstandar (per 1 SD logit), odds ratio per 1 SD, dan CI 95% bootstrap per `subject_id` (2000x, standardisasi dan fit diulang di setiap sampel). Porsi |koefisien| hanya gambaran bobot relatif, bukan dekomposisi kausal, karena input berkorelasi.
+6. Prediksi: fold 18 saja (fold 17 adalah data latih meta-learner). Fold 19 hanya dengan `--include-fold-19` setelah prediksi fold 19 model dasar tersedia dan rencana analisis dikunci.
+7. Kalibrasi Platt dan threshold M5/M6 ditentukan di fold 18 dengan aturan yang sama seperti model lain (`src/evaluation/run_fold18.py`).
+
+**Disetujui oleh:** Orang 3 (Dini). Tanggal: 14 Nov
+
+## 2026-11-24 — Aturan baseline M0 (M0-v2) dikunci sebelum M0 dinilai (Orang 3)
+
+**Latar belakang:**
+- Draf M0-v1 (sha256 aturan `e696c60b…f33e`) tidak pernah di-commit.
+- Draf itu diaudit di fold 0-16 tanpa membaca label (`python -m src.model.m0_rule --audit-angka`). Hasil audit (angka agregat):
+  - 126.611 kunjungan; 3.010 bernilai M0 = 1.
+  - 1.395 kunjungan positif hanya karena kata "injury". Dari jumlah itu, 372 kunjungan positif hanya karena pernyataan injury yang juga menyebut iskemia.
+  - Pernyataan injury yang disebut bersama perikarditis/repolarisasi: <10.
+  - Pernyataan infark + recent/evolving tanpa "acute" (tidak terhitung di v1): 230.
+  - Pernyataan acute + iskemia tanpa infark/injury (tidak terhitung di v1): 159.
+  - Pernyataan acute + perikarditis/repolarisasi: 279. Ini benar tidak dihitung.
+  - Kunjungan M0 = 0 dengan infark dan acute di dua baris berurutan: 48. Baris acute yang pendek, baris pertama yang menggantung, dan baris acute yang menyebut perikarditis masing-masing <10. Jadi sebagian besar pasangan ini tidak berpola kalimat terpotong, dan aturan tetap dinilai per baris.
+- Belum ada kinerja M0 yang dilihat pada fold mana pun.
+
+**Keputusan:**
+1. M0 adalah baseline klinis tanpa training: aturan kata kunci pada pernyataan interpretasi otomatis mesin EKG (`report_0` ... `report_17`) dari EKG pertama setiap kunjungan.
+   - Sumber teks: `data/interim/mm_reports.parquet`.
+   - Kunjungan yang dinilai sama dengan model lain (`train_tabular.load_master`).
+   - Satuan penilaian adalah satu pernyataan (huruf kecil). Kunjungan positif bila minimal satu pernyataannya positif. Kunjungan tanpa teks report = 0.
+2. **Definisi primer `M0`** ("mesin menandai kemungkinan infark, injury, atau iskemia akut"). Pernyataan positif bila cocok salah satu pola berikut:
+   - `stemi`;
+   - acute + MI/infarct dalam satu pernyataan, dengan urutan mana pun;
+   - infark + recent/evolving: kata pemisahnya hanya kata keraguan (possibly, probably, dll.), dan pernyataan tidak memuat old, age un/indetermined, atau kata pembanding (compared, previous, prior, since, tracing, unchanged);
+   - kata `injury`;
+   - acute + iskemia: maksimal 2 kata pemisah, dan pemisahnya bukan or/and/perikarditis/repolarisasi.
+3. **Analisis sensitivitas `M0S1`** ("mesin menyatakan infark akut/STEMI"): sama dengan M0, dengan dua perbedaan:
+   - injury hanya dihitung bila pernyataan yang sama tidak menyebut iskemia, perikarditis, atau repolarisasi;
+   - acute + iskemia tidak dihitung.
+
+   Akibatnya setiap kunjungan M0S1 = 1 juga M0 = 1.
+4. **Varian S2 tidak dijalankan sebagai analisis terpisah.** S2 hanya mengeluarkan injury yang disebut bersama perikarditis/repolarisasi. Menurut audit, pernyataan seperti itu <10, jadi S2 praktis identik dengan M0. Kalau S2 dilaporkan, selisih kedua tabel bisa membuka sel < 10.
+5. Infark lama atau infark dengan usia tidak pasti (old, age un/indetermined) tanpa acute/recent/evolving tidak dihitung di kedua definisi. Ini lebih ketat daripada definisi sistem komersial pada Al-Zaiti dkk. (Nature Medicine 2023), yang juga menghitung "age indeterminate".
+6. Pola negasi: `\b(?:no|without)\b[^,;]*\b(?:acute|stemi|infarct\w*|injury|mi)\b`. Kata "not" sengaja tidak dipakai agar "cannot rule out acute MI" tetap positif.
+7. Pencocokan memakai modul `re` Python, sehingga hasilnya tidak bergantung pada backend string pandas. Pola regex lengkap tercantum di `src/model/m0_rule.py` dan `reports/m0_rule.md`.
+8. "Injury" di sini adalah istilah EKG (current of injury), bukan "myocardial injury" biokimia menurut Fourth Universal Definition of MI (2018).
+9. Dasar pemilihan:
+   - Studi validasi pernyataan otomatis menghitung lebih dari sekadar "acute MI". Faramand dkk. (J Electrocardiol 2021) menghitung Acute MI atau Acute Ischemia. Al-Zaiti dkk. (Nature Medicine 2023) menghitung Acute MI, termasuk "recent", dan Acute Ischemia.
+   - De Bie dkk. (J Electrocardiol 2020) mencantumkan pernyataan injury dan "injury/ischemia" dalam daftar critical value beberapa program.
+   - Mayoritas kasus di kohort adalah NSTEMI, sehingga definisi yang membuang semua pernyataan injury/iskemia akan membuat M0 nyaris hanya mendeteksi STEMI.
+   - Definisi sempit tetap dilaporkan sebagai S1.
+10. Pelaporan:
+    - Kedua definisi dilaporkan dengan sensitivitas, spesifisitas, PPV, dan NPV, masing-masing dengan IK 95% bootstrap per `subject_id`.
+    - Selisih M0S1 - M0 juga dilaporkan.
+    - Jumlah kunjungan yang pindah dari M0 = 1 ke M0S1 = 0 dilaporkan per label dan per subtipe (STEMI, NSTEMI, tipe 2 murni).
+    - Kinerja kedua definisi juga dilaporkan di subgrup STEMI, NSTEMI, dan IMA tipe 2 murni.
+    - Perbandingan model lain dengan baseline hanya memakai M0 primer dan bersifat eksploratif.
+11. Definisi primer tidak diganti setelah hasil terlihat. Bila M0S1 ternyata lebih baik, temuan itu dilaporkan apa adanya sebagai hasil analisis sensitivitas.
+12. Sidik jari aturan (sha256 spesifikasi, dari `python -m src.model.m0_rule --spec`): `f515ab4f4d4d8d85d2e249ecacbad94fe67fc4eaf93f5648b8e6d452df19589d`.
+13. Audit M0-v2 di fold 0-16 tanpa label (`--audit-angka`):
+    - M0 = 1 pada 3.374 dari 126.611 kunjungan; M0S1 = 1 pada 2.858 kunjungan; 516 kunjungan pindah dari M0 = 1 ke M0S1 = 0.
+    - Pola baru `infark_recent`: 230 pernyataan. Dari jumlah itu, yang juga menyebut old/age undetermined <10, dan yang memuat kata pembanding <10.
+    - Pola baru `acute_iskemia`: 159 pernyataan. Yang juga menyebut perikarditis/repolarisasi <10.
+    - Sisa infark + recent/evolving dan sisa acute + iskemia yang tidak tertangkap pola: masing-masing <10.
+    - Pernyataan "acute" yang tetap tidak dihitung: 279, semuanya menyebut perikarditis/repolarisasi.
+    - Kunjungan M0 = 0 dengan infark dan acute di dua baris berurutan: <10.
+    - Infark tanpa acute/recent dan tanpa keterangan usia (mis. "consider ... infarct"): 1.681 pernyataan. Pernyataan ini sengaja tidak dihitung karena tidak menyatakan kejadian akut.
+14. Fold 19: `M0_fold19` dan `M0S1_fold19` hanya dibuat dengan `--include-fold-19`, setelah rencana analisis berstatus FINAL dan `src/model/m0_rule.py` di-commit tanpa perubahan sesudahnya (dicek otomatis oleh `src/evaluation/lock.py`).
+
+**Commit aturan M0:** 650d599
+
+**Disetujui oleh:** Orang 3 (Freta Yordinia Laura). Tanggal: 2026-11-24
+
+---
+
+## 2026-11-24 — Skrip evaluasi akhir `run_fold19.py` dan penjaga kunci fold 19 (Orang 3)
+
+**Keputusan:**
+1. `src/evaluation/run_fold19.py` menjalankan evaluasi akhir dengan langkah yang sama untuk fold 18 (uji kode) dan fold 19 (hasil).
+   - Tidak ada parameter yang dipilih ulang: kalibrasi Platt dan threshold rule-out/rule-in diambil apa adanya dari `reports/locked_fold18.json`.
+   - Prediksi positif bila `y_prob` mentah >= threshold.
+   - M0 dan M0S1 biner: positif bila `y_prob` = 1.
+2. Semua model (M0, M0S1, M1-M6) dinilai pada kunjungan yang sama (irisan `ed_stay_id`). Bila ada kunjungan yang tidak dimiliki semua model, jumlahnya dicetak sebagai peringatan dan dicatat di laporan.
+3. Uji di fold 18 bersifat in-sample, jadi BUKAN hasil. Sebelum bootstrap, skrip memeriksa dua hal:
+   - Parameter terkunci, bila dipakai pada berkas fold 18 utuh setiap model, harus memberi sensitivitas rule-out >= 0,90 dan spesifisitas rule-in >= 0,90, serta intercept dan slope kalibrasi setelah Platt dalam 0,01 dari 0 dan 1.
+   - sha256 berkas prediksi fold 18 harus sama dengan sha256 saat threshold dikunci.
+
+   Bila salah satu gagal, skrip berhenti.
+4. Metrik per model:
+   - AUROC, AUPRC, Brier setelah kalibrasi, dan intercept/slope kalibrasi;
+   - sensitivitas, spesifisitas, PPV, dan NPV pada threshold rule-out dan rule-in.
+
+   IK 95% berasal dari bootstrap berpasangan per `subject_id`, 2.000 kali, seed 42, metode persentil.
+5. Perbandingan:
+   - Utama: M5 - M4, dengan metrik utama ΔAUROC (bermakna bila IK 95% tidak mencakup 0).
+   - Eksploratif, tanpa koreksi multiplisitas: M1 - M3, M6 - M4, M5 - M2, M5 - M1, setiap model dikurangi M0, dan M0S1 - M0.
+6. Subgrup dan analisis sensitivitas:
+   - hanya rawat inap (`label_source = hosp`);
+   - tanpa IMA tipe 2 murni;
+   - tanpa keluhan yang menyebut diagnosis;
+   - IMA tipe 2 murni, STEMI, dan NSTEMI (masing-masing positif subtipe itu + semua negatif);
+   - laki-laki dan perempuan;
+   - usia < 65 dan >= 65 tahun;
+   - catatan obat rutin tersedia dan tidak tersedia.
+
+   Untuk setiap subgrup dilaporkan AUROC, sensitivitas, dan spesifisitas pada threshold rule-out. Subgrup dengan positif atau negatif < 10 hanya dilaporkan jumlahnya. M5 - M4 diulang hanya pada tiga analisis pertama.
+7. Hitungan < 10 ditulis "<10". Supresi komplementer juga diterapkan: bila satu bagian dari suatu total < 10, bagian lain yang terkecil ikut disembunyikan (TP/FN, FP/TN, perpindahan M0 -> M0S1 per label dan per subtipe). Laporan hanya berisi angka agregat.
+8. Fold 19 hanya bisa dijalankan dengan `--include-fold-19` bila tiga berkas berikut sudah di-commit dan tidak berubah sesudahnya (dicek oleh `src/evaluation/lock.py`):
+   - `reports/rencana_analisis_fold19.md`, yang berisi baris "Status: FINAL";
+   - `reports/locked_fold18.json`;
+   - `src/model/m0_rule.py`.
+
+   Evaluasi fold 19 hanya dijalankan satu kali. Jalan ulang hanya bisa dengan `--overwrite-post-hoc`, ditulis ke laporan terpisah, dan dilaporkan sebagai analisis post-hoc.
+
+**Disetujui oleh:** Orang 3 (Freta Yordinia Laura). Tanggal: 2026-11-24
+
+---
+
+## 2026-11-24 — Spesifikasi SHAP M2 dan M4 (Orang 3)
+
+**Keputusan:**
+1. Nilai SHAP M2 dan M4 dihitung dengan algoritma TreeSHAP bawaan XGBoost (`Booster.predict(pred_contribs=True)`), pada iterasi terbaik yang sama dengan prediksi (`iteration_range`). Ini definisi TreeSHAP yang sama dengan `shap.TreeExplainer` untuk model pohon. Opsi `--cek-shap` membandingkan keduanya pada 500 baris.
+2. Skala nilai: log-odds model mentah (sebelum Platt). Platt hanya mengubah logit secara linear (b > 0), jadi urutan kepentingan fitur tidak berubah.
+3. Ringkasan global per fitur asal:
+   - rata-rata |SHAP|, porsi terhadap total, dan rata-rata SHAP;
+   - kolom one-hot cara kedatangan dijumlahkan menjadi satu fitur;
+   - arah pengaruh = rata-rata SHAP per kelompok (biner: 1 vs 0; kontinu: kuartil bawah vs kuartil atas di fold yang sama; kategori: per kategori).
+
+   Kelompok < 10 kunjungan tidak ditampilkan. Tidak ada nilai per pasien di laporan.
+4. Pemeriksaan wajib (skrip berhenti bila gagal):
+   - jumlah kontribusi + bias = margin model (selisih <= 1e-3);
+   - sigmoid(margin) = `y_prob` di berkas prediksi fold yang sama (selisih <= 1e-5).
+5. M2 dan M4 tidak dilatih di fold 18 (M2: fold 0-16; M4: fold 0-17), jadi SHAP fold 18 dihitung pada data di luar training pohon.
+   - Fold yang dipakai untuk SHAP di naskah: ditetapkan di rencana analisis fold 19, sebelum fold 19 dibuka.
+   - SHAP fold 19 hanya dengan `--include-fold-19`, setelah rencana analisis FINAL di-commit.
+
+**Disetujui oleh:** Orang 3 (Freta Yordinia Laura). Tanggal: 2026-11-24
